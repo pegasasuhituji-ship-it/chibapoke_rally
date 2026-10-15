@@ -70,7 +70,7 @@
   };
   const resetPlayer=()=>{pid="";ls.s("quizPid","")};
 
-  // --- 外部DB(Apps Script)との通信。判定・保存はすべてサーバー側 ---
+  // --- 外部DB(Apps Script)との通信 ---
   async function api(action,data){
     if(!C.apiUrl) throw new Error("config.js の apiUrl が未設定です");
     const r=await fetch(C.apiUrl,{method:"POST",headers:{"Content-Type":"text/plain;charset=utf-8"},
@@ -79,7 +79,7 @@
     return r.json();
   }
 
-  // --- ニックネーム入力(タイトル/URL直アクセス共通) ---
+  // --- ニックネーム入力 ---
   const form=label=>`
     <label class="center" style="display:block;font-weight:700;margin-bottom:6px" for="name">ニックネーム(なくてもOK)</label>
     <input class="field" id="name" maxlength="20" value="${esc(nick)}" placeholder="なまえ" style="text-align:center">
@@ -114,7 +114,7 @@
     if(my!==seq) return;
     if(q.error==="noplayer"){resetPlayer();return route()}
     if(q.error) return fail("このURLは無効です");
-    if(q.solved) return location.replace("#/ok/"+t);   // 解答済みQRの読み直しはスタンプ画面へ
+    if(q.solved) return location.replace("#/ok/"+t);   // 解答済みはスタンプ画面へ
     app.innerHTML=`
       <div class="progress"><span>スタンプ ${q.score} / ${q.total}</span><span class="bar"><i style="width:${q.score/q.total*100}%"></i></span></div>
       ${img(q.image,"もんだい")}
@@ -144,7 +144,7 @@
         const r=await api("answer",{pid,token:t,answer:v});
         if(r.error==="noplayer"){resetPlayer();return route()}
         if(r.error) throw new Error(r.error);
-        if(r.correct){okCache={t,r};return location.replace("#/ok/"+t)}  // 正解ページへ遷移(戻るで問題に戻らない)
+        if(r.correct){okCache={t,r};return location.replace("#/ok/"+t)}
         wrong();
       }catch(e){alert("つながりませんでした: "+e.message)}
       go.disabled=false;
@@ -153,22 +153,24 @@
     ans.addEventListener("keydown",e=>{if(e.key==="Enter"&&!e.isComposing)submit()});
   }
 
-  // 正解ページ: 問題は表示せず、正解画像だけ
+  // 正解ページ: 問題ごとの正解画像 (r.correctImage) があれば優先表示
   async function showOk(t,my){
     if(!pid) return location.replace("#/q/"+t);
     let r=okCache&&okCache.t===t?okCache.r:null;
     if(!r){msg("よみこみ中…");r=await api("result",{pid,token:t});if(my!==seq)return}
-    if(!r.correct) return location.replace("#/q/"+t);   // 未正解なら問題へ
+    if(!r.correct) return location.replace("#/q/"+t);
+
+    const correctImgSrc = r.correctImage ? r.correctImage : pick(C.correctImages);
+
     app.innerHTML=`
       <div class="result ok">
         ${C.correctText?`<h2>${esc(C.correctText)}</h2>`:""}
-        ${img(pick(C.correctImages),"正解")}
+        ${img(correctImgSrc,"正解")}
         ${r.comment?`<p class="comment">${esc(r.comment)}</p>`:""}
         <p class="sub">スタンプ ${r.score} / ${r.total}</p>
       </div>`;
   }
 
-  // --- ルーティング: #/q/<秘密トークン>(QRごと) → 正解で #/ok/<トークン> ---
   async function route(){
     const my=++seq; window.scrollTo(0,0);
     const h=location.hash; let m;
