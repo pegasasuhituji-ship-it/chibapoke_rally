@@ -14,5 +14,5 @@ window.QUIZ_CONFIG = {
   wrongImages: ["img/wrong1.png"]
 
   // ※ questions(答え・ヒント・コメント・画像)は Code.gs 側に移しました。
-  //   答えをブラウザに置かないためです。
+  //    答えをブラウザに置かないためです。
 };
