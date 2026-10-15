@@ -1,0 +1,186 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>クイズ</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Zen+Maru+Gothic:wght@500;700;900&display=swap" rel="stylesheet">
+<style>
+  :root{--main:#ff7a5c;--sub:#3b4a6b;--paper:#fff;--base:#fff3e0}
+  *{box-sizing:border-box}
+  html,body{margin:0;min-height:100%}
+  body{font-family:"Zen Maru Gothic","Hiragino Maru Gothic ProN","Yu Gothic",sans-serif;color:var(--sub);background:var(--base) center/cover fixed no-repeat;line-height:1.7}
+  .wrap{max-width:720px;margin:0 auto;padding:20px 16px 48px}
+  .card{background:var(--paper);border:4px solid var(--sub);border-radius:28px;padding:24px 20px;box-shadow:0 8px 0 var(--sub)}
+  h1{font-size:clamp(28px,7vw,44px);font-weight:900;margin:0 0 4px;color:var(--main);text-align:center;line-height:1.3}
+  .sub{text-align:center;margin:0 0 20px;font-weight:700}
+  .pic{display:block;max-width:100%;height:auto;margin:0 auto 16px;border-radius:16px}
+  .center{text-align:center}
+  .btn{font:inherit;font-weight:900;font-size:18px;cursor:pointer;background:var(--main);color:#fff;border:4px solid var(--sub);border-radius:999px;padding:10px 32px;box-shadow:0 5px 0 var(--sub);transition:transform .08s,box-shadow .08s}
+  .btn:active{transform:translateY(4px);box-shadow:0 1px 0 var(--sub)}
+  .btn:disabled{opacity:.6;cursor:wait}
+  .btn.ghost{background:var(--paper);color:var(--sub)}
+  .btn:focus-visible,input:focus-visible{outline:4px solid #4aa3ff;outline-offset:3px}
+  .field{display:block;width:100%;font:inherit;font-size:18px;font-weight:700;padding:12px 16px;border:4px solid var(--sub);border-radius:16px;margin-bottom:16px;color:var(--sub)}
+  .row{display:flex;gap:10px}
+  .row .field{margin-bottom:0;flex:1;min-width:0}
+  .progress{display:flex;justify-content:space-between;align-items:center;font-weight:900;margin-bottom:12px}
+  .bar{height:12px;background:#e8e2d6;border:3px solid var(--sub);border-radius:999px;overflow:hidden;flex:1;margin-left:12px}
+  .bar i{display:block;height:100%;background:var(--main)}
+  .hint{margin:12px 0 0;font-size:15px}
+  .hint button{font:inherit;background:none;border:0;color:var(--main);font-weight:900;cursor:pointer;text-decoration:underline;padding:0}
+  .result{text-align:center}
+  .result h2{font-size:clamp(32px,9vw,52px);margin:0 0 8px;font-weight:900}
+  .result.ok h2{color:var(--main)}
+  .result.ng h2{color:#6b7385}
+  .result .pic{animation:pop .45s cubic-bezier(.2,1.6,.4,1)}
+  .result.ng .pic{animation:shake .4s}
+  @keyframes pop{from{transform:scale(.5);opacity:0}to{transform:scale(1);opacity:1}}
+  @keyframes shake{0%,100%{transform:translateX(0)}25%{transform:translateX(-10px)}75%{transform:translateX(10px)}}
+  .comment{background:#fff7e0;border:3px dashed var(--sub);border-radius:14px;padding:10px 14px;margin:0 0 16px;text-align:left}
+  .score{font-size:clamp(40px,12vw,72px);font-weight:900;color:var(--main);margin:8px 0}
+  .hidden{display:none!important}
+  @media (prefers-reduced-motion:reduce){.result .pic{animation:none}}
+</style>
+</head>
+<body>
+<div class="wrap"><main class="card" id="app"></main></div>
+<script src="config.js"></script>
+<script>
+(function(){
+  const C=window.QUIZ_CONFIG, app=document.getElementById("app"), root=document.documentElement.style;
+  for(const k of ["main","sub","paper","base"]) root.setProperty("--"+k,C.colors[k]);
+  if(C.backgroundImage) document.body.style.backgroundImage=`url("${C.backgroundImage}")`;
+  document.title=C.siteTitle;
+
+  const ls={g:k=>{try{return localStorage.getItem(k)||""}catch(e){return ""}},
+            s:(k,v)=>{try{v?localStorage.setItem(k,v):localStorage.removeItem(k)}catch(e){}}};
+  let pid=ls.g("quizPid"), nick=ls.g("quizName"), seq=0, okCache=null;
+
+  const esc=s=>String(s).replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+  const pick=a=>a&&a.length?a[Math.floor(Math.random()*a.length)]:"";
+  const img=(src,alt)=>src?`<img class="pic" src="${esc(src)}" alt="${esc(alt||"")}">`:"";
+  const $=id=>document.getElementById(id);
+  const msg=t=>{app.innerHTML=`<p class="center">${esc(t)}</p>`};
+  const fail=(t,retry)=>{
+    app.innerHTML=`<p class="center">${esc(t)}</p><div class="center"><button class="btn" id="re">${retry?"もういちど":"トップへ"}</button></div>`;
+    $("re").onclick=retry||(()=>{location.hash="#/"});
+  };
+  const resetPlayer=()=>{pid="";ls.s("quizPid","")};
+
+  // --- 外部DB(Apps Script)との通信。判定・保存はすべてサーバー側 ---
+  async function api(action,data){
+    if(!C.apiUrl) throw new Error("config.js の apiUrl が未設定です");
+    const r=await fetch(C.apiUrl,{method:"POST",headers:{"Content-Type":"text/plain;charset=utf-8"},
+      body:JSON.stringify(Object.assign({action},data||{}))});
+    if(!r.ok) throw new Error("HTTP "+r.status);
+    return r.json();
+  }
+
+  // --- ニックネーム入力(タイトル/URL直アクセス共通) ---
+  const form=label=>`
+    <label class="center" style="display:block;font-weight:700;margin-bottom:6px" for="name">ニックネーム(なくてもOK)</label>
+    <input class="field" id="name" maxlength="20" value="${esc(nick)}" placeholder="なまえ" style="text-align:center">
+    <div class="center"><button class="btn" id="start">${label}</button></div>
+    <p class="hint center" id="err"></p>`;
+  function bindForm(done){
+    const b=$("start"), n=$("name");
+    const go=async()=>{
+      b.disabled=true;
+      try{
+        const name=n.value.trim(), r=await api("start",{name});
+        if(r.error) throw new Error(r.error);
+        pid=r.pid; nick=name; ls.s("quizPid",pid); ls.s("quizName",nick); done(r);
+      }catch(e){b.disabled=false;$("err").textContent="つながりませんでした: "+e.message}
+    };
+    b.onclick=go;
+    n.addEventListener("keydown",e=>{if(e.key==="Enter"&&!e.isComposing)go()});
+  }
+
+  function showTitle(){
+    app.innerHTML=`<h1>${esc(C.siteTitle)}</h1><p class="sub">${esc(C.subtitle)}</p>${img(C.titleImage)}${form("とうろく")}`;
+    bindForm(()=>{app.innerHTML=`<h1>${esc(C.siteTitle)}</h1><p class="sub">とうろくしたよ！<br>QRコードをよみとって もんだいに ちょうせんしてね</p>`});
+  }
+
+  async function showQuestion(t,my){
+    if(!pid){
+      app.innerHTML=`<h1>${esc(C.siteTitle)}</h1><p class="sub">はじめに ニックネームを おしえてね</p>${form("はじめる")}`;
+      return bindForm(()=>route());
+    }
+    msg("よみこみ中…");
+    const q=await api("question",{pid,token:t});
+    if(my!==seq) return;
+    if(q.error==="noplayer"){resetPlayer();return route()}
+    if(q.error) return fail("このURLは無効です");
+    if(q.solved) return location.replace("#/ok/"+t);   // 解答済みQRの読み直しはスタンプ画面へ
+    app.innerHTML=`
+      <div class="progress"><span>スタンプ ${q.score} / ${q.total}</span><span class="bar"><i style="width:${q.score/q.total*100}%"></i></span></div>
+      ${img(q.image,"もんだい")}
+      <div id="play">
+        <div class="row">
+          <input class="field" id="ans" autocomplete="off" placeholder="こたえを入力" aria-label="こたえ">
+          <button class="btn" id="go">こたえる</button>
+        </div>
+        ${q.hint?`<p class="hint"><button id="hintBtn">ヒントを見る</button><span id="hintText" class="hidden"> ${esc(q.hint)}</span></p>`:""}
+      </div>
+      <div id="result" class="hidden"></div>`;
+    const ans=$("ans"), go=$("go"), play=$("play"), box=$("result");
+    ans.focus();
+    if(q.hint) $("hintBtn").onclick=e=>{$("hintText").classList.remove("hidden");e.target.remove()};
+    const wrong=()=>{
+      play.classList.add("hidden");
+      box.className="result ng";
+      box.innerHTML=`<h2>${esc(C.wrongText)}</h2>${img(pick(C.wrongImages),"不正解")}<div class="center"><button class="btn ghost" id="retry">もういちど</button></div>`;
+      $("retry").onclick=()=>{box.className="hidden";play.classList.remove("hidden");ans.value="";ans.focus()};
+      $("retry").focus();
+    };
+    const submit=async()=>{
+      const v=ans.value.trim();
+      if(!v) return ans.focus();
+      go.disabled=true;
+      try{
+        const r=await api("answer",{pid,token:t,answer:v});
+        if(r.error==="noplayer"){resetPlayer();return route()}
+        if(r.error) throw new Error(r.error);
+        if(r.correct){okCache={t,r};return location.replace("#/ok/"+t)}  // 正解ページへ遷移(戻るで問題に戻らない)
+        wrong();
+      }catch(e){alert("つながりませんでした: "+e.message)}
+      go.disabled=false;
+    };
+    go.onclick=submit;
+    ans.addEventListener("keydown",e=>{if(e.key==="Enter"&&!e.isComposing)submit()});
+  }
+
+  // 正解ページ: 問題は表示せず、正解画像だけ
+  async function showOk(t,my){
+    if(!pid) return location.replace("#/q/"+t);
+    let r=okCache&&okCache.t===t?okCache.r:null;
+    if(!r){msg("よみこみ中…");r=await api("result",{pid,token:t});if(my!==seq)return}
+    if(!r.correct) return location.replace("#/q/"+t);   // 未正解なら問題へ
+    app.innerHTML=`
+      <div class="result ok">
+        ${C.correctText?`<h2>${esc(C.correctText)}</h2>`:""}
+        ${img(pick(C.correctImages),"正解")}
+        ${r.comment?`<p class="comment">${esc(r.comment)}</p>`:""}
+        <p class="sub">スタンプ ${r.score} / ${r.total}</p>
+      </div>`;
+  }
+
+  // --- ルーティング: #/q/<秘密トークン>(QRごと) → 正解で #/ok/<トークン> ---
+  async function route(){
+    const my=++seq; window.scrollTo(0,0);
+    const h=location.hash; let m;
+    try{
+      if((m=h.match(/^#\/q\/([\w-]+)$/))) return await showQuestion(m[1],my);
+      if((m=h.match(/^#\/ok\/([\w-]+)$/))) return await showOk(m[1],my);
+      showTitle();
+    }catch(e){if(my===seq) fail("エラー: "+e.message,route)}
+  }
+  window.addEventListener("hashchange",route);
+  route();
+})();
+</script>
+</body>
+</html>
