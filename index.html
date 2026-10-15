@@ -101,7 +101,7 @@
 
   function showTitle(){
     app.innerHTML=`<h1>${esc(C.siteTitle)}</h1><p class="sub">${esc(C.subtitle)}</p>${img(C.titleImage)}${form("とうろく")}`;
-    bindForm(()=>{app.innerHTML=`<h1>${esc(C.siteTitle)}</h1><p class="sub">とうろくしたよ！<br>QRコードをよみとって もんだいに ちょうせんしてね</p>`});
+    bindForm(()=>{app.innerHTML=`<h1>${esc(C.siteTitle)}</h1><p class="sub">とうろくしたよ！<br>QRコードをよみとって もんだいに ちょうせんしてね</p><br>※自作サイトなので多少読み込みに時間がかかる場合があります。</p>`});
   }
 
   async function showQuestion(t,my){
@@ -164,7 +164,7 @@
 
     app.innerHTML=`
       <div class="result ok">
-        ${C.correctText?`<h2>${esc(C.correctText)}</h2>`:""}<br><span style="font-size:0.75em">オリジナルポケモンスタンプをプレゼント！</span></h2>`:""}
+        ${C.correctText?`<h2>${esc(C.correctText)}</h2>`:""}<br><span style="font-size:0.75em">オリジナルポケモンスタンプをプレゼント！</span></h2>`:""};
         ${img(correctImgSrc,"正解")}
         ${r.comment?`<p class="comment">${esc(r.comment)}</p>`:""}
         <p class="sub">スタンプ ${r.score} / ${r.total}</p>
