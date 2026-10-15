@@ -164,7 +164,7 @@
 
     app.innerHTML=`
       <div class="result ok">
-        ${C.correctText?`<h2>${esc(C.correctText)}</h2>`:""}
+        ${C.correctText?`<h2>${esc(C.correctText)}</h2>`:""}<br><span style="font-size:0.75em">オリジナルポケモンスタンプをプレゼント！</span></h2>`:""}
         ${img(correctImgSrc,"正解")}
         ${r.comment?`<p class="comment">${esc(r.comment)}</p>`:""}
         <p class="sub">スタンプ ${r.score} / ${r.total}</p>
